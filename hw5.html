@@ -1,0 +1,230 @@
+<html>
+<head>
+	<title>Robert Allen: WebGL</title>
+	<meta charset="UTF-8">
+	<!-- jQuery -->
+	<script src="http://code.jquery.com/jquery-3.3.1.min.js" type="text/javascript"></script>
+	
+	<!-- glMatrix class -->
+	<script src="js/glMatrix-0.9.5.min.js" type="text/javascript"></script>
+
+	<!-- Our webGL code -->
+	<script src="js/cube.js" type="text/javascript"></script>
+	<script src="js/pyramid.js" type="text/javascript"></script>
+	<script src="js/sphere.js" type="text/javascript"></script>
+	<script src="js/screen.js" type="text/javascript"></script>
+	<script src="js/main.js" type="text/javascript"></script>
+
+	<!-- Vertex shader -->
+	<script id="shader-vs" type="x-shader/x-vertex"> 
+		precision highp float;
+		
+		attribute vec3 XYZ;
+		attribute vec3 RGB;
+		attribute vec2 TEX;
+		attribute vec3 NORM;
+		
+		// Transformation Matrixes
+		uniform mat4 PMatrix;
+		uniform mat4 MVMatrix;
+		uniform mat4 VMatrix;
+		uniform mat3 NMatrix;
+
+		// Light Properties
+		uniform vec4 LightPos;
+		uniform vec3 Ambient;
+		uniform vec3 Diffuse;
+		uniform vec3 Specular;
+		
+		varying vec4 col;
+		varying vec2 TexCoord;
+
+		vec4 phong() {
+			//  P is the vertex coordinate on body
+			vec3 P = vec3(MVMatrix * vec4(XYZ,1.0));
+			//  N is the object normal at P
+			vec3 N = normalize(NMatrix * NORM);
+			//  Light Position 
+			vec3 L = normalize(vec3(VMatrix * LightPos) - P);
+
+			//  Ambient (ignoring emission since non-existant on cube)
+			vec3 color = Ambient;
+
+			//  Diffuse light intensity is cosine of light and normal vectors
+			float Id = dot(L,N);
+			if (Id>0.0)
+			{
+				//  Add diffuse
+				color += Id * Diffuse;
+				//  R is the reflected light vector R = 2(L.N)N - L
+				vec3 R = reflect(-L, N);
+				//  V is the view vector (eye at the origin)
+				vec3 V = normalize(-P);
+				//  Specular is cosine of reflected and view vectors
+				float Is = dot(R,V);
+				// Set default shininess val to 16
+				if (Is>0.0) color += pow(Is, 16.0) * Specular;
+			}
+
+			//  Return sum of color components
+			return vec4(RGB * color, 1.0);
+		}
+		
+		void main(void){
+			col = phong();
+			TexCoord = TEX;
+			gl_Position = PMatrix * MVMatrix * vec4(XYZ,1);
+		}
+	</script> 
+	 
+	<!-- Fragment shader -->
+	<script id="shader-fs" type="x-shader/x-fragment"> 
+		precision highp float;
+
+		varying vec4 col;
+		varying vec2 TexCoord;
+
+		uniform sampler2D tex1;
+		uniform float noTexture;
+
+		// If noTexture set to 1 then don't show the texture and don't do lighting
+		vec4 noTex(vec4 c) {
+			vec4 white = vec4(1.0);
+			vec4 black = vec4(0.0, 0.0, 0.0, 1.0);
+			vec4 noTex = vec4(noTexture);
+
+			c = clamp(c + noTex, black, white);
+			vec4 color = clamp(col + noTex, black, white);
+
+			return c * color;
+		}
+
+		void main(void){
+			vec4 c = texture2D(tex1, TexCoord);
+			gl_FragColor = noTex(c);
+		}
+	</script> 
+
+	<!-- Fragment Green Screen Shader -->
+	<!-- https://groups.csail.mit.edu/graphics/classes/CompPhoto06/html/lecturenotes/07_matting_6.pdf -->
+	<script id="shader-green-screen" type="x-shader/x-fragment"> 
+		precision highp float;
+
+		float a1 = 2.25; // threshold
+		float a2 = 1.0; // usually 0.5 < a2 < 1.5
+
+		varying vec4 col;
+		varying vec2 TexCoord;
+
+		uniform sampler2D tex1;
+		uniform sampler2D tex2;
+		uniform float noTexture;
+
+		// Vlahos assumption
+		// Returns 1 if r or b are dominant
+		// Returns [0, 1) if g is dominant
+		float getAlpha(vec4 c) {
+			float alpha = 1.0 - a1 * (c.g - a2 * max(c.r, c.b));
+			return clamp(alpha, 0.0, 1.0);
+		}
+
+		// Responsible for removing green spill from reflections
+		vec4 despill(vec4 c) {
+			// If g > avg(r,b) set g = avg(r,b)
+			// else do nothing
+			c.g -= max(c.g - mix(c.b, c.r, 0.5), 0.0);
+
+			return c;
+		}
+
+		// If noTexture set to 1 then don't show the texture and don't do lighting
+		// Used to show light ball
+		vec4 noTex(vec4 c) {
+			vec4 white = vec4(1.0);
+			vec4 black = vec4(0.0, 0.0, 0.0, 1.0);
+			vec4 noTex = vec4(noTexture);
+
+			c = clamp(c + noTex, black, white);
+			vec4 color = clamp(col + noTex, black, white);
+
+			return c * color;
+		}
+
+		void main(void) {
+			vec4 fg = texture2D(tex1, TexCoord);
+			vec4 bg = texture2D(tex2, TexCoord);
+
+			float a = getAlpha(fg);
+			fg = despill(fg);
+
+			vec4 c = mix(bg, fg, a);
+
+			gl_FragColor = noTex(c);
+		}
+	</script> 
+
+	<script id="shader-checkerboard" type="x-shader/x-fragment">
+		precision highp float;
+
+		varying vec4 col;
+		varying vec2 TexCoord;
+
+		uniform sampler2D tex1;
+		uniform float noTexture;
+
+		// If noTexture set to 1 then don't show the texture and don't do lighting
+		vec4 noTex(vec4 c) {
+			vec4 white = vec4(1.0);
+			vec4 black = vec4(0.0, 0.0, 0.0, 1.0);
+			vec4 noTex = vec4(noTexture);
+
+			c = clamp(c + noTex, black, white);
+			vec4 color = clamp(col + noTex, black, white);
+
+			return c * color;
+		}
+
+		void main(void){
+			vec4 c = texture2D(tex1, TexCoord);
+			gl_FragColor = noTex(c);
+		}
+	</script>
+
+	<!-- Load WebGL -->
+	<script src="js/main.js" type="text/javascript"></script>
+	
+	<!-- Page styles -->
+	<link rel="stylesheet" type="text/css" href="style/style.css">
+</head>
+<body onload="webGLStart();" onresize="canvas.resize();"> 
+	<video src="https://r6---sn-qxoedn7d.googlevideo.com/videoplayback?requiressl=yes&clen=1879333&mime=video%2Fmp4&source=youtube&key=cms1&ipbits=0&itag=18&c=WEB&ratebypass=yes&gir=yes&expire=1519273840&dur=20.387&pl=17&ip=155.94.234.2&sparams=clen,dur,ei,expire,gir,id,ip,ipbits,ipbypass,itag,lmt,mime,mip,mm,mn,ms,mv,pl,ratebypass,requiressl,source&ei=EPONWtDEFayB_APKtaXwAw&id=o-ACX0xX3ADMn0KKpOjX6EKJ7axs2eYmqbxYt06dbnxkdt&fvip=6&lmt=1519244819622029&signature=039523B1A903D836CEFCA6B9F15532ECE865C66E.3EA9548AB1D7C16A2B032C205EFCC12C6ABD3AD6&redirect_counter=1&rm=sn-a5mds7s&req_id=8692d823f52da3ee&cms_redirect=yes&ipbypass=yes&mip=76.120.64.78&mm=31&mn=sn-qxoedn7d&ms=au&mt=1519252168&mv=m"
+		crossorigin="use-credentials" muted="muted"></video>
+	<div class="center wrapper">
+		<canvas id="canvas" width="500" height="500"></canvas>
+	</div>
+	<div class="wrapper">
+		<label for="shader-program">Shader: </label>
+		<select id="shader-program" name="shader-program">
+			<option value="0" selected="selected">Normal</option>
+			<option value="1">Green Screen</option>
+			<option value="2">Checker Board</option>
+		</select>
+		<br>
+		<label for="texture-fg">Texture Foreground: </label>
+		<select id="texture-fg" name="texture-fg">
+			<option value="0" selected="selected">Crate</option>
+			<option value="1">Firefox Video</option>
+			<option value="2">Green Screen Video</option>
+			<option value="3">Yosemite Video</option>
+		</select>
+		<br>
+		<label for="texture-bg">Texture Background: </label>
+		<select id="texture-bg" name="texture-bg">
+			<option value="0" selected="selected">Crate</option>
+			<option value="1">Firefox Video</option>
+			<option value="2">Green Screen Video</option>
+			<option value="3">Yosemite Video</option>
+		</select>
+	</div>
+</body>
+</html>
