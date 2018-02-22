@@ -1,6 +1,20 @@
+html {
+	font-size: 16px;
+	font-family: Arial, sans-serif;
+}
+
 body {
 	background-color: #f0f0f0;
 	height: 100%;
+}
+
+p {
+	margin: 4px 0;
+}
+
+.half {
+	float: left;
+	width: 50%;
 }
 
 .wrapper {

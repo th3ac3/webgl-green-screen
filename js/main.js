@@ -27,6 +27,10 @@ var s = {
     lR: 2,
     ylight: 2,
     lpos: {},
+    // Ripple settings
+    rippleSpeed: 4.0,
+    rippleAmount: 12.0,
+    rippleDistortion: 0.04,
 
     shaderIndex: 0,
     x0: 0,
@@ -99,7 +103,7 @@ function initShaders() {
     var fragmentShaders = [];
     fragmentShaders[0] = getShader(gl, "shader-fs");
     fragmentShaders[1] = getShader(gl, "shader-green-screen");
-    fragmentShaders[2] = getShader(gl, "shader-checkerboard");
+    fragmentShaders[2] = getShader(gl, "shader-ripple");
 
     shaderProgram = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
@@ -132,10 +136,20 @@ function initShaders() {
     shaderProgram.nMatrixUniform = gl.getUniformLocation(shaderProgram, "NMatrix");
     shaderProgram.noTexture = gl.getUniformLocation(shaderProgram, "noTexture");
 
+    shaderProgram.rippleDistortion = gl.getUniformLocation(shaderProgram, "rippleDistortion");
+    shaderProgram.rippleAmount = gl.getUniformLocation(shaderProgram, "rippleAmount");
+    shaderProgram.rippleSpeed = gl.getUniformLocation(shaderProgram, "rippleSpeed");
+    shaderProgram.time = gl.getUniformLocation(shaderProgram, "time");
+
     shaderProgram.ambientUniform = gl.getUniformLocation(shaderProgram, "Ambient");
     shaderProgram.diffuseUniform = gl.getUniformLocation(shaderProgram, "Diffuse");
     shaderProgram.specularUniform = gl.getUniformLocation(shaderProgram, "Specular");
     shaderProgram.lPosUniform = gl.getUniformLocation(shaderProgram, "LightPos");
+
+    // Set ripple settings
+    gl.uniform1f(shaderProgram.rippleAmount, s.rippleAmount);
+    gl.uniform1f(shaderProgram.rippleDistortion, s.rippleDistortion);
+    gl.uniform1f(shaderProgram.rippleSpeed, s.rippleSpeed);
 }
 
 // From https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial/Animating_textures_in_WebGL 
@@ -145,7 +159,6 @@ function setupVideo(url) {
     var playing = false;
     var timeupdate = false;
 
-    video.crossOrigin = ""; // same as cO = "anonymous"
     video.autoplay = true;
     video.muted = true;
     video.loop = true;
@@ -216,8 +229,7 @@ function initTextures() {
     textures[0] = initImageTexture("crate.png");
     textures[1] = initVideoTexture("./videos/Firefox.mp4");
     textures[2] = initVideoTexture("./videos/green_screen.mp4");
-    textures[3] = initVideoTexture("https://r6---sn-qxoedn7d.googlevideo.com/videoplayback?requiressl=yes&clen=1879333&mime=video%2Fmp4&source=youtube&key=cms1&ipbits=0&itag=18&c=WEB&ratebypass=yes&gir=yes&expire=1519273840&dur=20.387&pl=17&ip=155.94.234.2&sparams=clen,dur,ei,expire,gir,id,ip,ipbits,ipbypass,itag,lmt,mime,mip,mm,mn,ms,mv,pl,ratebypass,requiressl,source&ei=EPONWtDEFayB_APKtaXwAw&id=o-ACX0xX3ADMn0KKpOjX6EKJ7axs2eYmqbxYt06dbnxkdt&fvip=6&lmt=1519244819622029&signature=039523B1A903D836CEFCA6B9F15532ECE865C66E.3EA9548AB1D7C16A2B032C205EFCC12C6ABD3AD6&redirect_counter=1&rm=sn-a5mds7s&req_id=8692d823f52da3ee&cms_redirect=yes&ipbypass=yes&mip=76.120.64.78&mm=31&mn=sn-qxoedn7d&ms=au&mt=1519252168&mv=m");
-    //textures[3] = initVideoTexture("./videos/yosemite.mp4");
+    textures[3] = initVideoTexture("./videos/yosemite.mp4");
 
     // Skip the first 15s of greenscreen video
     getVideo(2).addEventListener('loadedmetadata', function() {
@@ -490,16 +502,41 @@ function handleKeyDown(event) {
         case 76: // l: do lighting
             s.doLight = !s.doLight;
             break;
-        case 37: // left arrow
-        case 65: // a: select previous item
+        case 37: // left arrow: select previous item
             if (--s.itemIndex < 0)
                 s.itemIndex = itemBuffers.length - 1;
             break;
-        case 39: // right arrow
-        case 68: // d: select next item
+        case 39: // select next item
             s.itemIndex = (s.itemIndex + 1) % itemBuffers.length;
             break;
-        case 83: // s: start and stop video
+        case 81: // q: increase ripple amount
+            s.rippleAmount += 1;
+            gl.uniform1f(shaderProgram.rippleAmount, s.rippleAmount);
+            break;
+        case 65: // a: decrease ripple amount
+            s.rippleAmount -= 1;
+            gl.uniform1f(shaderProgram.rippleAmount, s.rippleAmount);
+            break;
+        case 87: // w: increase ripple distortion
+            s.rippleDistortion += 0.003;
+            gl.uniform1f(shaderProgram.rippleDistortion, s.rippleDistortion);
+            break;
+        case 83: // s: decrease ripple distortion
+            s.rippleDistortion -= 0.003;
+            gl.uniform1f(shaderProgram.rippleDistortion, s.rippleDistortion);
+            break;
+        case 69: // e: increase ripple speed
+            s.rippleSpeed += 0.25;
+            gl.uniform1f(shaderProgram.rippleSpeed, s.rippleSpeed);
+            break;
+        case 68: // d: decrease ripple speed
+            s.rippleSpeed -= 0.25;
+            gl.uniform1f(shaderProgram.rippleSpeed, s.rippleSpeed);
+            break;
+        case 32: // space: start and stop video
+            // Prevent scroll down
+            event.preventDefault();
+
             if (isVideo(s.fgI)) {
                 var video = getVideo(s.fgI);
                 if (video.paused)
@@ -508,7 +545,7 @@ function handleKeyDown(event) {
                     video.pause();
             }
             
-            if (isVideo(s.bgI)) {
+            if (isVideo(s.bgI) && s.fgI != s.bgI) {
                 var video = getVideo(s.bgI);
                 if (video.paused)
                     video.play();
@@ -565,6 +602,8 @@ function animate(now) {
         gl.activeTexture(gl.TEXTURE1);
         updateTexture(textures[s.bgI], getVideo(s.bgI));
     }
+
+    gl.uniform1f(shaderProgram.time, now);
 
     then = now;
 }

@@ -163,7 +163,7 @@
 		}
 	</script> 
 
-	<script id="shader-checkerboard" type="x-shader/x-fragment">
+	<script id="shader-ripple" type="x-shader/x-fragment">
 		precision highp float;
 
 		varying vec4 col;
@@ -171,6 +171,24 @@
 
 		uniform sampler2D tex1;
 		uniform float noTexture;
+		// Controls how much a ripple distorts the texture
+		uniform float rippleDistortion;
+		// Controls how many ripples we get
+		uniform float rippleAmount;
+		// Ripple speed
+		uniform float rippleSpeed;
+		uniform float time;
+
+		vec2 ripple(vec2 tc) {
+			// convert tc to value between [-1,1]
+			vec2 p = 2.0 * tc - 1.0;
+			// Calculate distance from center of texture
+			float len = length(p);
+			// Alter texture coordinates by cos
+			vec2 uv = tc + cos(len * rippleAmount - rippleSpeed * time) * rippleDistortion;
+
+			return uv;
+		}
 
 		// If noTexture set to 1 then don't show the texture and don't do lighting
 		vec4 noTex(vec4 c) {
@@ -185,7 +203,8 @@
 		}
 
 		void main(void){
-			vec4 c = texture2D(tex1, TexCoord);
+			vec2 uv = ripple(TexCoord);
+			vec4 c = texture2D(tex1, uv);
 			gl_FragColor = noTex(c);
 		}
 	</script>
@@ -197,8 +216,6 @@
 	<link rel="stylesheet" type="text/css" href="style/style.css">
 </head>
 <body onload="webGLStart();" onresize="canvas.resize();"> 
-	<video src="https://r6---sn-qxoedn7d.googlevideo.com/videoplayback?requiressl=yes&clen=1879333&mime=video%2Fmp4&source=youtube&key=cms1&ipbits=0&itag=18&c=WEB&ratebypass=yes&gir=yes&expire=1519273840&dur=20.387&pl=17&ip=155.94.234.2&sparams=clen,dur,ei,expire,gir,id,ip,ipbits,ipbypass,itag,lmt,mime,mip,mm,mn,ms,mv,pl,ratebypass,requiressl,source&ei=EPONWtDEFayB_APKtaXwAw&id=o-ACX0xX3ADMn0KKpOjX6EKJ7axs2eYmqbxYt06dbnxkdt&fvip=6&lmt=1519244819622029&signature=039523B1A903D836CEFCA6B9F15532ECE865C66E.3EA9548AB1D7C16A2B032C205EFCC12C6ABD3AD6&redirect_counter=1&rm=sn-a5mds7s&req_id=8692d823f52da3ee&cms_redirect=yes&ipbypass=yes&mip=76.120.64.78&mm=31&mn=sn-qxoedn7d&ms=au&mt=1519252168&mv=m"
-		crossorigin="use-credentials" muted="muted"></video>
 	<div class="center wrapper">
 		<canvas id="canvas" width="500" height="500"></canvas>
 	</div>
@@ -207,7 +224,7 @@
 		<select id="shader-program" name="shader-program">
 			<option value="0" selected="selected">Normal</option>
 			<option value="1">Green Screen</option>
-			<option value="2">Checker Board</option>
+			<option value="2">Ripple</option>
 		</select>
 		<br>
 		<label for="texture-fg">Texture Foreground: </label>
@@ -225,6 +242,27 @@
 			<option value="2">Green Screen Video</option>
 			<option value="3">Yosemite Video</option>
 		</select>
+		<div>
+			<div class="half">
+				<h3>Controls</h3>
+				<p>Click and Drag: Rotate object around</p>
+				<p>Next Item: Right Arrow</p>
+				<p>Previous Item: Left Arrow</p>
+				<p>Pause Video: Space (Only for video textures)m/p>
+				<p>l: Toggle lighting</p>
+				<p>p: Toggle projection</p>
+				<p>m: Toggle "movie mode" (easy view mode)</p>
+			</div>
+			<div class="half">
+				<h3>Ripple Shader Controls</h3>
+				<p>q: Increase amount of ripples</p>
+				<p>a: Decrease amount of ripples</p>
+				<p>w: Increase distortion of ripples</p>
+				<p>s: Decrease distortion of ripples</p>
+				<p>e: Increase ripple speed</p>
+				<p>d: Decrease ripple speed</p>
+			</div>
+		</div>
 	</div>
 </body>
 </html>
