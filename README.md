@@ -7,10 +7,10 @@ Controls are available on the website.
 
 To best exhibit the green screen shader...
 1. Select the green screen shader in the shader drop down
-2. Set the foreground texture to the greenscreen
-3. Set the the background texture to a texture different than the greenscreen.
+2. Set the foreground texture to the green screen
+3. Set the the background texture to a texture different than the green screen.
 
-Also viewable on my Github at https://th3ac3.github.io/webgl/
+Also viewable live at https://th3ac3.github.io/webgl/
 
 ## Credit:
 
